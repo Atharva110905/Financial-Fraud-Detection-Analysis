@@ -5,4 +5,3 @@ plotly
 scikit-learn
 xgboost
 lightgbm
-tensorflow-cpu
