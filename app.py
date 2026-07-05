@@ -332,43 +332,70 @@ def load_transactions():
     except Exception as e:
         pass
     
-    # Fallback: Generate sample data
+    # Fallback: Generate sample data - BULLETPROOF VERSION
     st.warning("⚠️ Database not found - using sample data for demo")
     np.random.seed(42)
     n_rows = 5000
     
-    # Create timestamp properly
-    timestamps = pd.date_range("2025-01-01", periods=n_rows, freq="1H")
+    # Create simple timestamp list without freq parameter
+    start = pd.Timestamp("2025-01-01")
+    timestamps = [start + pd.Timedelta(hours=int(i)) for i in range(n_rows)]
     
     df = pd.DataFrame({
         "transaction_id": [f"TXN{str(i).zfill(7)}" for i in range(1, n_rows+1)],
         "customer_id": [f"CUST{np.random.randint(1000, 9000)}" for _ in range(n_rows)],
         "timestamp": timestamps,
-        "amount": np.random.gamma(shape=2.0, scale=5000, size=n_rows),
-        "merchant_category": np.random.choice(["Grocery", "Electronics", "Fashion", "Travel", "Dining"], n_rows),
+        "amount": np.random.gamma(shape=2.0, scale=5000, size=n_rows).astype(float),
+        "merchant_category": np.random.choice(["Grocery", "Electronics", "Fashion", "Travel", "Dining", "Fuel", "Healthcare"], n_rows),
         "channel": np.random.choice(["POS", "Online", "ATM", "Mobile App"], n_rows),
-        "city": np.random.choice(["Mumbai", "Delhi", "Bengaluru"], n_rows),
-        "latitude": np.random.uniform(10, 28, n_rows),
-        "longitude": np.random.uniform(70, 88, n_rows),
-        "distance_from_home_km": np.random.uniform(0, 500, n_rows),
-        "device_type": np.random.choice(["Mobile", "Desktop"], n_rows),
-        "is_new_device": np.random.choice([0, 1], n_rows),
-        "card_type": np.random.choice(["Visa", "Mastercard"], n_rows),
-        "customer_risk_segment": np.random.choice(["Low", "Medium"], n_rows),
-        "account_age_days": np.random.randint(30, 3650, n_rows),
-        "hour_of_day": np.random.randint(0, 24, n_rows),
-        "day_of_week": np.random.choice(["Monday", "Tuesday", "Wednesday"], n_rows),
-        "is_weekend": np.random.choice([0, 1], n_rows),
-        "month": "January",
-        "minutes_since_last_txn": np.random.exponential(scale=100, size=n_rows),
-        "avg_monthly_spend": np.random.gamma(shape=3.0, scale=8000, size=n_rows),
-        "amount_to_avg_spend_ratio": np.random.uniform(0.5, 5, n_rows),
-        "is_fraud": np.random.choice([0, 0, 0, 0, 0, 1], n_rows),
-        "fraud_pattern": "None"
+        "city": np.random.choice(["Mumbai", "Delhi", "Bengaluru", "Hyderabad", "Chennai"], n_rows),
+        "latitude": np.random.uniform(10, 28, n_rows).astype(float),
+        "longitude": np.random.uniform(70, 88, n_rows).astype(float),
+        "distance_from_home_km": np.random.uniform(0, 500, n_rows).astype(float),
+        "device_type": np.random.choice(["Mobile", "Desktop", "POS Terminal"], n_rows),
+        "is_new_device": np.random.choice([0, 1], n_rows).astype(int),
+        "card_type": np.random.choice(["Visa", "Mastercard", "RuPay"], n_rows),
+        "customer_risk_segment": np.random.choice(["Low", "Medium", "High"], n_rows),
+        "account_age_days": np.random.randint(30, 3650, n_rows).astype(int),
+        "hour_of_day": np.random.randint(0, 24, n_rows).astype(int),
+        "day_of_week": np.random.choice(["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"], n_rows),
+        "is_weekend": np.random.choice([0, 1], n_rows).astype(int),
+        "month": np.random.choice(["January", "February", "March", "April"], n_rows),
+        "minutes_since_last_txn": np.random.exponential(scale=100, size=n_rows).astype(float),
+        "avg_monthly_spend": np.random.gamma(shape=3.0, scale=8000, size=n_rows).astype(float),
+        "amount_to_avg_spend_ratio": np.random.uniform(0.5, 5, n_rows).astype(float),
+        "is_fraud": np.random.choice([0, 0, 0, 0, 0, 1], n_rows).astype(int),
+        "fraud_pattern": np.random.choice(["None", "Card Testing", "Account Takeover", "Geo-Velocity"], n_rows)
     })
     
-    # Ensure timestamp is properly formatted
+    # Ensure all data types are correct
     df["timestamp"] = pd.to_datetime(df["timestamp"])
+    df = df.astype({
+        "transaction_id": "object",
+        "customer_id": "object",
+        "timestamp": "datetime64[ns]",
+        "amount": "float64",
+        "merchant_category": "object",
+        "channel": "object",
+        "city": "object",
+        "latitude": "float64",
+        "longitude": "float64",
+        "distance_from_home_km": "float64",
+        "device_type": "object",
+        "is_new_device": "int64",
+        "card_type": "object",
+        "customer_risk_segment": "object",
+        "account_age_days": "int64",
+        "hour_of_day": "int64",
+        "day_of_week": "object",
+        "is_weekend": "int64",
+        "month": "object",
+        "minutes_since_last_txn": "float64",
+        "avg_monthly_spend": "float64",
+        "amount_to_avg_spend_ratio": "float64",
+        "is_fraud": "int64",
+        "fraud_pattern": "object"
+    })
     
     return df
 
@@ -533,23 +560,25 @@ if df is not None and len(df) > 0:
         "Channel", options=sorted(df["channel"].unique()),
         default=sorted(df["channel"].unique())
     )
+    
+    categories = st.sidebar.multiselect(
+        "Merchant category", options=sorted(df["merchant_category"].unique()),
+        default=sorted(df["merchant_category"].unique())
+    )
+
+    amount_range = st.sidebar.slider(
+        "Transaction amount (₹)",
+        float(df["amount"].min()), float(df["amount"].max()),
+        (float(df["amount"].min()), float(df["amount"].max()))
+    )
 else:
     # Fallback values when no data
     date_range = (pd.Timestamp("2025-01-01").date(), pd.Timestamp("2025-12-31").date())
     risk_segments = ["Low", "Medium", "High"]
     channels = ["POS", "Online", "ATM", "Mobile App"]
+    categories = ["Grocery", "Electronics", "Fashion", "Travel", "Dining"]
+    amount_range = (0, 100000)
     st.sidebar.info("⚠️ No data available for filters")
-
-categories = st.sidebar.multiselect(
-    "Merchant category", options=sorted(df["merchant_category"].unique()),
-    default=sorted(df["merchant_category"].unique())
-)
-
-amount_range = st.sidebar.slider(
-    "Transaction amount (₹)",
-    float(df["amount"].min()), float(df["amount"].max()),
-    (float(df["amount"].min()), float(df["amount"].max()))
-)
 
 st.sidebar.markdown("---")
 st.sidebar.caption("Built with Streamlit · scikit-learn · XGBoost · LightGBM · TensorFlow")
@@ -570,9 +599,11 @@ if df is not None and len(df) > 0:
         (df["channel"].isin(channels)) &
         (df["merchant_category"].isin(categories)) &
         (df["amount"] >= amount_range[0]) &
-    (df["amount"] <= amount_range[1])
-)
-fdf = df[mask].copy()
+        (df["amount"] <= amount_range[1])
+    )
+    fdf = df[mask].copy()
+else:
+    fdf = df  # fdf = None if df is None
 
 # ---------------------------------------------------------------
 # Header
@@ -580,8 +611,8 @@ fdf = df[mask].copy()
 st.title("🛡️ Financial Fraud Detection Model & Dashboard")
 st.caption("ML-powered fraud analytics across 100K+ transactions · ETL via SQLite · 7-model comparison")
 
-if len(fdf) == 0:
-    st.warning("No transactions match the current filters. Adjust filters in the sidebar.")
+if fdf is None or len(fdf) == 0:
+    st.warning("No transactions available or no transactions match the current filters. Adjust filters in the sidebar.")
     st.stop()
 
 # ---------------------------------------------------------------
