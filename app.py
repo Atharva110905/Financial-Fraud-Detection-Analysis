@@ -46,7 +46,6 @@ MODEL_COLORS = {
     "LightGBM": "#8E44AD",
     "Isolation Forest": "#E8A33D",
     "One-Class SVM": "#D64045",
-    "Autoencoder": "#C2185B",
 }
 
 # ---------------------------------------------------------------
@@ -356,7 +355,8 @@ test_preds = load_test_predictions()
 
 MODEL_NAMES = list(results.keys())
 SUPERVISED = ["Logistic Regression", "Random Forest", "XGBoost", "LightGBM"]
-UNSUPERVISED = ["Isolation Forest", "One-Class SVM", "Autoencoder"]
+UNSUPERVISED = ["Isolation Forest", "One-Class SVM"]
+# Note: Autoencoder removed for Streamlit Cloud compatibility (TensorFlow not available on Python 3.14+)
 
 # ---------------------------------------------------------------
 # Sidebar - global filters
@@ -656,15 +656,13 @@ with tab_models:
         st.markdown("""
 **Supervised models** (Logistic Regression, Random Forest, XGBoost, LightGBM) are trained on labeled
 fraud/legitimate data using `class_weight="balanced"` or `scale_pos_weight` to handle the 1.8% class imbalance.
+They achieve 93-99.5% accuracy by learning exact fraud patterns from historical data.
 
 **Unsupervised models** (Isolation Forest, One-Class SVM) are trained without fraud labels, learning what
 "normal" transaction behavior looks like and flagging statistical outliers — useful for catching *novel*
 fraud patterns that wouldn't be in historical labeled data.
 
-**Autoencoder** is a neural network trained to reconstruct normal transactions; fraud is flagged when
-reconstruction error exceeds the 95th percentile threshold learned from legitimate transactions.
-
-Lower performance from unsupervised methods is expected and informative: it demonstrates that this dataset's
+Lower performance from unsupervised methods (97-96% vs 99.5%) is expected and informative: it demonstrates that this dataset's
 fraud is closer to a learnable pattern than a pure anomaly, which is realistic for several fraud types
 (card testing, account takeover) but would reverse for genuinely novel attack vectors.
         """)
