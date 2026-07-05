@@ -336,10 +336,14 @@ def load_transactions():
     st.warning("⚠️ Database not found - using sample data for demo")
     np.random.seed(42)
     n_rows = 5000
+    
+    # Create timestamp properly
+    timestamps = pd.date_range("2025-01-01", periods=n_rows, freq="1H")
+    
     df = pd.DataFrame({
         "transaction_id": [f"TXN{str(i).zfill(7)}" for i in range(1, n_rows+1)],
         "customer_id": [f"CUST{np.random.randint(1000, 9000)}" for _ in range(n_rows)],
-        "timestamp": pd.date_range("2025-01-01", periods=n_rows, freq="1H"),
+        "timestamp": timestamps,
         "amount": np.random.gamma(shape=2.0, scale=5000, size=n_rows),
         "merchant_category": np.random.choice(["Grocery", "Electronics", "Fashion", "Travel", "Dining"], n_rows),
         "channel": np.random.choice(["POS", "Online", "ATM", "Mobile App"], n_rows),
@@ -362,6 +366,10 @@ def load_transactions():
         "is_fraud": np.random.choice([0, 0, 0, 0, 0, 1], n_rows),
         "fraud_pattern": "None"
     })
+    
+    # Ensure timestamp is properly formatted
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    
     return df
 
 @st.cache_data
@@ -457,12 +465,11 @@ def load_test_predictions():
         pass
     
     # Fallback: Generate dummy predictions
-    transactions = load_transactions()
     np.random.seed(42)
-    n_test = min(len(transactions) // 4, 25000)
+    n_test = 5000
     
     return pd.DataFrame({
-        "transaction_id": transactions.head(n_test)["transaction_id"].values,
+        "transaction_id": [f"TXN{str(i).zfill(7)}" for i in range(1, n_test+1)],
         "actual_fraud": np.random.choice([0, 1], n_test, p=[0.98, 0.02]),
         "logistic_regression_score": np.random.uniform(0, 1, n_test),
         "random_forest_score": np.random.uniform(0, 1, n_test),
@@ -479,8 +486,14 @@ try:
     pr_data = load_pr_data()
     feature_importance = load_feature_importance()
     test_preds = load_test_predictions()
+    
+    # Safety checks
+    if df is None or len(df) == 0:
+        raise ValueError("No data available")
+    
 except Exception as e:
-    st.error(f"Error loading data: {str(e)}")
+    st.error(f"Error loading data: {str(e)[:100]}")
+    # Create minimal fallback
     df = None
     results = {}
     roc_data = {}
@@ -488,7 +501,12 @@ except Exception as e:
     feature_importance = {}
     test_preds = None
 
-MODEL_NAMES = list(results.keys()) if results else ["Logistic Regression", "Random Forest", "XGBoost", "LightGBM", "Isolation Forest", "One-Class SVM"]
+# Only proceed if we have data
+if df is not None and len(df) > 0:
+    MODEL_NAMES = list(results.keys()) if results else ["Logistic Regression", "Random Forest", "XGBoost", "LightGBM", "Isolation Forest", "One-Class SVM"]
+else:
+    MODEL_NAMES = ["Logistic Regression", "Random Forest", "XGBoost", "LightGBM", "Isolation Forest", "One-Class SVM"]
+
 SUPERVISED = ["Logistic Regression", "Random Forest", "XGBoost", "LightGBM"]
 UNSUPERVISED = ["Isolation Forest", "One-Class SVM"]
 # Note: Autoencoder removed for Streamlit Cloud compatibility (TensorFlow not available on Python 3.14+)
@@ -500,20 +518,27 @@ st.sidebar.markdown("## 🛡️ Fraud Detection")
 st.sidebar.markdown("---")
 st.sidebar.markdown("### Filters")
 
-date_min, date_max = df["timestamp"].min().date(), df["timestamp"].max().date()
-date_range = st.sidebar.date_input(
-    "Date range", value=(date_min, date_max), min_value=date_min, max_value=date_max
-)
+if df is not None and len(df) > 0:
+    date_min, date_max = df["timestamp"].min().date(), df["timestamp"].max().date()
+    date_range = st.sidebar.date_input(
+        "Date range", value=(date_min, date_max), min_value=date_min, max_value=date_max
+    )
 
-risk_segments = st.sidebar.multiselect(
-    "Customer risk segment", options=sorted(df["customer_risk_segment"].unique()),
-    default=sorted(df["customer_risk_segment"].unique())
-)
+    risk_segments = st.sidebar.multiselect(
+        "Customer risk segment", options=sorted(df["customer_risk_segment"].unique()),
+        default=sorted(df["customer_risk_segment"].unique())
+    )
 
-channels = st.sidebar.multiselect(
-    "Channel", options=sorted(df["channel"].unique()),
-    default=sorted(df["channel"].unique())
-)
+    channels = st.sidebar.multiselect(
+        "Channel", options=sorted(df["channel"].unique()),
+        default=sorted(df["channel"].unique())
+    )
+else:
+    # Fallback values when no data
+    date_range = (pd.Timestamp("2025-01-01").date(), pd.Timestamp("2025-12-31").date())
+    risk_segments = ["Low", "Medium", "High"]
+    channels = ["POS", "Online", "ATM", "Mobile App"]
+    st.sidebar.info("⚠️ No data available for filters")
 
 categories = st.sidebar.multiselect(
     "Merchant category", options=sorted(df["merchant_category"].unique()),
@@ -531,18 +556,20 @@ st.sidebar.caption("Built with Streamlit · scikit-learn · XGBoost · LightGBM 
 st.sidebar.caption("Data: 100,065 synthetic transactions · 1.80% fraud rate")
 
 # Apply filters
-if len(date_range) == 2:
-    start_date, end_date = date_range
-else:
-    start_date, end_date = date_min, date_max
+if df is not None and len(df) > 0:
+    if len(date_range) == 2:
+        start_date, end_date = date_range
+    else:
+        date_min, date_max = df["timestamp"].min().date(), df["timestamp"].max().date()
+        start_date, end_date = date_min, date_max
 
-mask = (
-    (df["timestamp"].dt.date >= start_date) &
-    (df["timestamp"].dt.date <= end_date) &
-    (df["customer_risk_segment"].isin(risk_segments)) &
-    (df["channel"].isin(channels)) &
-    (df["merchant_category"].isin(categories)) &
-    (df["amount"] >= amount_range[0]) &
+    mask = (
+        (df["timestamp"].dt.date >= start_date) &
+        (df["timestamp"].dt.date <= end_date) &
+        (df["customer_risk_segment"].isin(risk_segments)) &
+        (df["channel"].isin(channels)) &
+        (df["merchant_category"].isin(categories)) &
+        (df["amount"] >= amount_range[0]) &
     (df["amount"] <= amount_range[1])
 )
 fdf = df[mask].copy()
